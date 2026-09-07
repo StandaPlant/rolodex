@@ -268,19 +268,19 @@
     return data;
   }
 
-  async function apiPost(action, body){
+  async function apiWrite(action, body){
+    // Writes go out as GET requests with the data packed into a "payload"
+    // query parameter, not a POST body. Apps Script's /exec redirect chain
+    // has a well-known history of breaking cross-origin POST requests in the
+    // browser (surfaces as a generic "Load failed"), even with CORS-safe
+    // headers. GET doesn't have that problem and is already proven to work.
     const cfg = getConfig();
     if (!cfg) throw new Error('Not configured yet — set this up in Settings.');
     const url = new URL(cfg.apiUrl);
     url.searchParams.set('token', cfg.token);
     url.searchParams.set('action', action);
-    const res = await fetch(url.toString(), {
-      method: 'POST',
-      // text/plain avoids a CORS preflight (OPTIONS) request, which Apps Script
-      // web apps don't handle — Code.gs still reads this as JSON either way.
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(body || {})
-    });
+    url.searchParams.set('payload', JSON.stringify(body || {}));
+    const res = await fetch(url.toString());
     const data = await res.json();
     if (data.error) throw new Error(data.error);
     return data;
@@ -422,7 +422,7 @@
     };
     statusEl.innerHTML = '<p class="status">Saving…</p>';
     try {
-      const data = await apiPost('createPerson', record);
+      const data = await apiWrite('createPerson', record);
       await loadPeople();
       showView('people');
       openPerson(data.person.personId);
@@ -458,7 +458,7 @@
     };
     statusEl.innerHTML = '<p class="status">Saving…</p>';
     try {
-      await apiPost('createNote', record);
+      await apiWrite('createNote', record);
       if (followUp) openCalendarFor(state.peopleById[personId]);
       await openPerson(personId);
     } catch(err){
