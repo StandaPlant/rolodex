@@ -50,12 +50,10 @@
   .field label{ display:block; font-size:13px; font-weight:600; color:var(--ink-soft); margin-bottom:6px; }
   input[type=text], input[type=date], input[type=url], input[type=password], textarea, select{
     width:100%; box-sizing:border-box; padding:11px 12px; border:1px solid var(--line); border-radius:9px;
-    background:var(--surface); color:var(--ink); font-size:16px; font-family:inherit;
+    background:var(--surface); color:var(--ink); font-size:19px; font-family:inherit; min-height:48px;
   }
   textarea{ min-height:110px; resize:vertical; }
   input[type=date]{
-    font-size:19px;
-    min-height:48px;
     -webkit-appearance:none;
     appearance:none;
   }
@@ -69,7 +67,9 @@
     background:var(--accent); color:#fff; cursor:pointer; width:100%;
   }
   .btn.secondary{ background:var(--surface-2); color:var(--ink); border:1px solid var(--line); }
+  .btn.small{ width:auto; padding:9px 14px; font-size:13.5px; }
   .btn.link{ background:transparent; color:var(--accent-ink); width:auto; padding:8px 0; font-weight:500; }
+  .btn[disabled]{ opacity:.55; }
   .btn:active{ opacity:.8; }
   .btn-row{ display:flex; gap:10px; }
   .btn-row .btn{ flex:1; }
@@ -206,7 +206,16 @@
       <p id="nf-person" class="section-label"></p>
       <div class="field"><label for="nf-date">When</label><input type="date" id="nf-date" required></div>
       <div class="field"><label for="nf-location">Where</label><input type="text" id="nf-location" placeholder="e.g. Café Slavia, Prague"></div>
-      <div class="field"><label for="nf-summary">What was discussed</label><textarea id="nf-summary" required></textarea></div>
+      <div class="field">
+        <label for="nf-summary">What was discussed</label>
+        <textarea id="nf-summary" required></textarea>
+        <p class="helptext">Tip: tap the microphone icon on the keyboard to dictate instead of typing.</p>
+        <div class="btn-row" style="margin-top:8px;">
+          <button class="btn secondary small" type="button" id="nf-summarize">✨ Summarize with AI</button>
+          <button class="btn link small" type="button" id="nf-undo-summarize" hidden>Undo</button>
+        </div>
+        <div id="nf-summarize-status"></div>
+      </div>
       <div class="checkbox-row">
         <input type="checkbox" id="nf-followup">
         <label for="nf-followup">Schedule a follow-up in Google Calendar</label>
@@ -471,8 +480,47 @@
     document.getElementById('nf-person').textContent = person
       ? 'For ' + [person.firstName, person.lastName].filter(Boolean).join(' ')
       : '';
+    document.getElementById('nf-summarize-status').innerHTML = '';
+    document.getElementById('nf-undo-summarize').hidden = true;
+    lastSummarizeOriginal = null;
     showView('note-form');
   }
+
+  // Holds the pre-summary text so "Undo" can restore it — cleared whenever the
+  // note form is opened fresh, or after a successful undo.
+  let lastSummarizeOriginal = null;
+
+  document.getElementById('nf-summarize').addEventListener('click', async function(){
+    const textarea = document.getElementById('nf-summary');
+    const statusEl = document.getElementById('nf-summarize-status');
+    const btn = document.getElementById('nf-summarize');
+    const raw = textarea.value.trim();
+    if (!raw){
+      statusEl.innerHTML = '<p class="status error">Type or dictate some notes first.</p>';
+      return;
+    }
+    btn.disabled = true;
+    statusEl.innerHTML = '<p class="status">Summarizing…</p>';
+    try {
+      const data = await apiWrite('summarize', { text: raw });
+      lastSummarizeOriginal = raw;
+      textarea.value = data.summary;
+      document.getElementById('nf-undo-summarize').hidden = false;
+      statusEl.innerHTML = '<p class="status ok">Summarized.</p>';
+    } catch(err){
+      statusEl.innerHTML = '<p class="status error">' + escapeHtml(err.message) + '</p>';
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  document.getElementById('nf-undo-summarize').addEventListener('click', function(){
+    if (lastSummarizeOriginal === null) return;
+    document.getElementById('nf-summary').value = lastSummarizeOriginal;
+    lastSummarizeOriginal = null;
+    document.getElementById('nf-undo-summarize').hidden = true;
+    document.getElementById('nf-summarize-status').innerHTML = '';
+  });
 
   document.getElementById('note-form').addEventListener('submit', async function(e){
     e.preventDefault();
