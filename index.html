@@ -49,10 +49,16 @@
   .field{ margin-bottom:16px; }
   .field label{ display:block; font-size:13px; font-weight:600; color:var(--ink-soft); margin-bottom:6px; }
   input[type=text], input[type=date], input[type=url], input[type=password], textarea, select{
-    width:100%; padding:11px 12px; border:1px solid var(--line); border-radius:9px;
+    width:100%; box-sizing:border-box; padding:11px 12px; border:1px solid var(--line); border-radius:9px;
     background:var(--surface); color:var(--ink); font-size:16px; font-family:inherit;
   }
   textarea{ min-height:110px; resize:vertical; }
+  input[type=date]{
+    font-size:19px;
+    min-height:48px;
+    -webkit-appearance:none;
+    appearance:none;
+  }
   .checkbox-row{ display:flex; align-items:center; gap:10px; padding:4px 0; }
   .checkbox-row input{ width:20px; height:20px; }
   .checkbox-row label{ font-size:15px; color:var(--ink); }
@@ -435,7 +441,12 @@
 
   function openNoteForm(personId){
     const person = state.peopleById[personId];
-    document.getElementById('note-form').reset();
+    const form = document.getElementById('note-form');
+    form.reset();
+    // Bind the target person directly to the form element itself, rather than
+    // reading whatever state.currentPersonId happens to be at submit time —
+    // that ambient value is what caused "personId is required" to slip through.
+    form.dataset.personId = personId || '';
     document.getElementById('nf-status').innerHTML = '';
     document.getElementById('nf-date').value = new Date().toISOString().slice(0, 10);
     document.getElementById('nf-person').textContent = person
@@ -447,7 +458,11 @@
   document.getElementById('note-form').addEventListener('submit', async function(e){
     e.preventDefault();
     const statusEl = document.getElementById('nf-status');
-    const personId = state.currentPersonId;
+    const personId = e.target.dataset.personId;
+    if (!personId){
+      statusEl.innerHTML = '<p class="status error">No person is selected for this note — go back and open a person first.</p>';
+      return;
+    }
     const followUp = document.getElementById('nf-followup').checked;
     const record = {
       personId: personId,
