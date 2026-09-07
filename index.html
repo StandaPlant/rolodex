@@ -248,6 +248,7 @@
     tab: 'people',
     people: [],
     peopleById: {},
+    notesByPerson: {},
     currentPersonId: null,
     previousView: 'people'
   };
@@ -378,11 +379,25 @@
     try {
       const person = state.peopleById[personId] || (await apiGet('person', { personId: personId })).person;
       const notesData = await apiGet('notes', { personId: personId });
-      renderPersonDetail(person, notesData.notes || []);
+      state.notesByPerson[personId] = notesData.notes || [];
+      renderPersonDetail(person, state.notesByPerson[personId]);
       document.getElementById('topbar-sub').textContent = [person.firstName, person.lastName].filter(Boolean).join(' ');
     } catch(err){
       wrap.innerHTML = '<p class="empty">' + escapeHtml(err.message) + '</p>';
     }
+  }
+
+  // Shows a person immediately from data already in hand (e.g. just returned by
+  // createPerson), with no extra network round-trips — used right after creating
+  // a person, where openPerson()'s two fetches would just be re-reading data we
+  // already have and would add several seconds for nothing.
+  function showPersonImmediately(person, notes){
+    state.currentPersonId = person.personId;
+    state.peopleById[person.personId] = person;
+    state.notesByPerson[person.personId] = notes || [];
+    showView('person');
+    renderPersonDetail(person, state.notesByPerson[person.personId]);
+    document.getElementById('topbar-sub').textContent = [person.firstName, person.lastName].filter(Boolean).join(' ');
   }
 
   function renderPersonDetail(person, notes){
@@ -429,9 +444,13 @@
     statusEl.innerHTML = '<p class="status">Saving…</p>';
     try {
       const data = await apiWrite('createPerson', record);
-      await loadPeople();
-      showView('people');
-      openPerson(data.person.personId);
+      const person = data.person;
+      // Add it locally instead of re-fetching the whole People list — the
+      // create call already told us everything about the new row.
+      state.people.push(person);
+      state.people.sort(byLastThenFirst);
+      state.peopleById[person.personId] = person;
+      showPersonImmediately(person, []);
     } catch(err){
       statusEl.innerHTML = '<p class="status error">' + escapeHtml(err.message) + '</p>';
     }
@@ -473,9 +492,14 @@
     };
     statusEl.innerHTML = '<p class="status">Saving…</p>';
     try {
-      await apiWrite('createNote', record);
+      const data = await apiWrite('createNote', record);
+      // Prepend locally instead of re-fetching the person's whole notes list —
+      // the create call already returned the new note in full.
+      if (!state.notesByPerson[personId]) state.notesByPerson[personId] = [];
+      state.notesByPerson[personId].unshift(data.note);
       if (followUp) openCalendarFor(state.peopleById[personId]);
-      await openPerson(personId);
+      showView('person');
+      renderPersonDetail(state.peopleById[personId], state.notesByPerson[personId]);
     } catch(err){
       statusEl.innerHTML = '<p class="status error">' + escapeHtml(err.message) + '</p>';
     }
@@ -549,6 +573,11 @@
   });
 
   // ---------- helpers ----------
+
+  function byLastThenFirst(a, b){
+    return String(a.lastName || '').localeCompare(String(b.lastName || ''))
+      || String(a.firstName || '').localeCompare(String(b.firstName || ''));
+  }
 
   function escapeHtml(s){
     return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
