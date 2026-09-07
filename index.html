@@ -52,7 +52,7 @@
     width:100%; box-sizing:border-box; padding:11px 12px; border:1px solid var(--line); border-radius:9px;
     background:var(--surface); color:var(--ink); font-size:19px; font-family:inherit; min-height:48px;
   }
-  textarea{ min-height:110px; resize:vertical; }
+  textarea{ min-height:220px; resize:vertical; }
   input[type=date]{
     -webkit-appearance:none;
     appearance:none;
@@ -110,6 +110,12 @@
   .note-card .summary{ font-size:14.5px; line-height:1.45; white-space:pre-wrap; }
   .note-card .person-link{ font-size:13.5px; font-weight:600; color:var(--accent-ink); margin-bottom:4px; }
   .followup-tag{ font-size:11px; font-weight:600; color:var(--good); }
+
+  .note-detail-card{
+    background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:20px;
+  }
+  .note-detail-card .when{ font-size:14px; color:var(--ink-faint); display:flex; justify-content:space-between; gap:8px; margin-bottom:14px; }
+  .note-detail-card .summary-full{ font-size:18px; line-height:1.65; white-space:pre-wrap; color:var(--ink); }
 
   .search-box{ display:flex; gap:8px; margin-bottom:16px; }
   .search-box input{ flex:1; }
@@ -177,6 +183,12 @@
     <div id="person-detail"></div>
   </section>
 
+  <!-- NOTE DETAIL (full page, tap a note card to get here) -->
+  <section id="view-note-detail" class="view">
+    <button class="backlink" id="nd-back">‹ Back</button>
+    <div id="note-detail"></div>
+  </section>
+
   <!-- PERSON FORM -->
   <section id="view-person-form" class="view">
     <button class="backlink" data-back="people">‹ Cancel</button>
@@ -221,7 +233,7 @@
         <label for="nf-followup">Schedule a follow-up in Google Calendar</label>
       </div>
       <div id="nf-status"></div>
-      <button class="btn" type="submit">Save note</button>
+      <button class="btn" type="submit" id="nf-submit-btn">Save note</button>
     </form>
   </section>
 
@@ -325,6 +337,7 @@
       person: ['Rolodex', 'Person'],
       'person-form': ['New person', ''],
       'note-form': ['New note', ''],
+      'note-detail': ['Rolodex', 'Note'],
       search: ['Rolodex', 'Search notes and people']
     };
     const t = titles[name] || ['Rolodex', ''];
@@ -422,7 +435,7 @@
       html += '<p class="empty">No notes yet — tap + to add the first one.</p>';
     } else {
       html += notes.map(function(n){
-        return '<div class="note-card">' +
+        return '<div class="note-card" data-note="' + attr(n.noteId) + '">' +
           '<div class="when"><span>' + escapeHtml(n.date || '') + (n.location ? ' · ' + escapeHtml(n.location) : '') + '</span>' +
           (n.followUp ? '<span class="followup-tag">Follow-up</span>' : '') + '</div>' +
           '<div class="summary">' + escapeHtml(n.summary || '') + '</div>' +
@@ -430,7 +443,48 @@
       }).join('');
     }
     wrap.innerHTML = html;
+    wrap.querySelectorAll('.note-card').forEach(function(card){
+      card.addEventListener('click', function(){
+        const note = (state.notesByPerson[person.personId] || []).find(function(n){ return n.noteId === card.dataset.note; });
+        if (note) openNoteDetail(note, null, 'person');
+      });
+    });
   }
+
+  // ---------- note detail (full page) ----------
+
+  // Opens a note full-page, in a much larger font than the compact cards it's
+  // listed in. Reachable from a person's note list or from search results —
+  // fromView records which one, so the back button returns to the right place.
+  // personLabel is only shown when relevant (from search, where the note isn't
+  // already scoped to one visible person); pass null from the person page.
+  function openNoteDetail(note, personLabel, fromView){
+    state.previousView = fromView || 'person';
+    showView('note-detail');
+    renderNoteDetail(note, personLabel);
+  }
+
+  function renderNoteDetail(note, personLabel){
+    const wrap = document.getElementById('note-detail');
+    const when = [note.date || '', note.location || ''].filter(Boolean).join(' · ');
+    wrap.innerHTML =
+      (personLabel ? '<p class="section-label">' + escapeHtml(personLabel) + '</p>' : '') +
+      '<div class="note-detail-card">' +
+        '<div class="when"><span>' + escapeHtml(when) + '</span>' +
+        (note.followUp ? '<span class="followup-tag">Follow-up</span>' : '') + '</div>' +
+        '<div class="summary-full">' + escapeHtml(note.summary || '') + '</div>' +
+      '</div>' +
+      '<div class="btn-row" style="margin-top:16px;">' +
+        '<button class="btn" id="nd-edit">Edit note</button>' +
+      '</div>';
+    document.getElementById('nd-edit').addEventListener('click', function(){
+      openNoteForm(note.personId, note);
+    });
+  }
+
+  document.getElementById('nd-back').addEventListener('click', function(){
+    showView(state.previousView || 'person');
+  });
 
   // ---------- person form ----------
 
@@ -467,23 +521,39 @@
 
   // ---------- note form ----------
 
-  function openNoteForm(personId){
+  // Pass an existingNote to edit it in place; omit it to start a blank note.
+  function openNoteForm(personId, existingNote){
     const person = state.peopleById[personId];
     const form = document.getElementById('note-form');
     form.reset();
-    // Bind the target person directly to the form element itself, rather than
-    // reading whatever state.currentPersonId happens to be at submit time —
-    // that ambient value is what caused "personId is required" to slip through.
+    // Bind the target person (and, when editing, the note) directly to the form
+    // element itself, rather than reading ambient state at submit time — that's
+    // what caused "personId is required" to slip through before.
     form.dataset.personId = personId || '';
+    form.dataset.noteId = existingNote ? existingNote.noteId : '';
+    // Remembers whether follow-up was already checked coming in, so saving an
+    // edit doesn't re-open a Calendar tab every time — only a fresh tick to it does.
+    form.dataset.initialFollowUp = existingNote
+      ? String(existingNote.followUp === true || existingNote.followUp === 'true')
+      : 'false';
     document.getElementById('nf-status').innerHTML = '';
-    document.getElementById('nf-date').value = new Date().toISOString().slice(0, 10);
-    document.getElementById('nf-person').textContent = person
-      ? 'For ' + [person.firstName, person.lastName].filter(Boolean).join(' ')
-      : '';
     document.getElementById('nf-summarize-status').innerHTML = '';
     document.getElementById('nf-undo-summarize').hidden = true;
     lastSummarizeOriginal = null;
+    document.getElementById('nf-person').textContent = person
+      ? 'For ' + [person.firstName, person.lastName].filter(Boolean).join(' ')
+      : '';
+    if (existingNote){
+      document.getElementById('nf-date').value = existingNote.date || new Date().toISOString().slice(0, 10);
+      document.getElementById('nf-location').value = existingNote.location || '';
+      document.getElementById('nf-summary').value = existingNote.summary || '';
+      document.getElementById('nf-followup').checked = existingNote.followUp === true || existingNote.followUp === 'true';
+    } else {
+      document.getElementById('nf-date').value = new Date().toISOString().slice(0, 10);
+    }
+    document.getElementById('nf-submit-btn').textContent = existingNote ? 'Save changes' : 'Save note';
     showView('note-form');
+    document.getElementById('topbar-title').textContent = existingNote ? 'Edit note' : 'New note';
   }
 
   // Holds the pre-summary text so "Undo" can restore it — cleared whenever the
@@ -526,11 +596,16 @@
     e.preventDefault();
     const statusEl = document.getElementById('nf-status');
     const personId = e.target.dataset.personId;
+    const noteId = e.target.dataset.noteId; // set only when editing an existing note
     if (!personId){
       statusEl.innerHTML = '<p class="status error">No person is selected for this note — go back and open a person first.</p>';
       return;
     }
     const followUp = document.getElementById('nf-followup').checked;
+    // Only pop open Calendar for a follow-up that's newly checked in this save —
+    // not every time an already-flagged note gets edited.
+    const wasFollowUp = e.target.dataset.initialFollowUp === 'true';
+    const shouldOpenCalendar = followUp && !wasFollowUp;
     const record = {
       personId: personId,
       date: document.getElementById('nf-date').value,
@@ -540,14 +615,33 @@
     };
     statusEl.innerHTML = '<p class="status">Saving…</p>';
     try {
-      const data = await apiWrite('createNote', record);
-      // Prepend locally instead of re-fetching the person's whole notes list —
-      // the create call already returned the new note in full.
-      if (!state.notesByPerson[personId]) state.notesByPerson[personId] = [];
-      state.notesByPerson[personId].unshift(data.note);
-      if (followUp) openCalendarFor(state.peopleById[personId]);
-      showView('person');
-      renderPersonDetail(state.peopleById[personId], state.notesByPerson[personId]);
+      if (noteId){
+        record.noteId = noteId;
+        await apiWrite('updateNote', record);
+        // Merge the edit into the cached list locally instead of re-fetching —
+        // the sheet is the source of truth, but we already know exactly what changed.
+        // (The list may not exist yet if this note was reached via Search rather
+        // than via the person's own page — in that case just add it.)
+        if (!state.notesByPerson[personId]) state.notesByPerson[personId] = [];
+        const list = state.notesByPerson[personId];
+        const idx = list.findIndex(function(n){ return n.noteId === noteId; });
+        if (idx !== -1) list[idx] = Object.assign({}, list[idx], record);
+        else list.push(record);
+        list.sort(byDateDesc);
+        if (shouldOpenCalendar) openCalendarFor(state.peopleById[personId]);
+        showView('person');
+        renderPersonDetail(state.peopleById[personId], list);
+      } else {
+        const data = await apiWrite('createNote', record);
+        // Prepend locally instead of re-fetching the person's whole notes list —
+        // the create call already returned the new note in full.
+        if (!state.notesByPerson[personId]) state.notesByPerson[personId] = [];
+        state.notesByPerson[personId].unshift(data.note);
+        state.notesByPerson[personId].sort(byDateDesc);
+        if (shouldOpenCalendar) openCalendarFor(state.peopleById[personId]);
+        showView('person');
+        renderPersonDetail(state.peopleById[personId], state.notesByPerson[personId]);
+      }
     } catch(err){
       statusEl.innerHTML = '<p class="status error">' + escapeHtml(err.message) + '</p>';
     }
@@ -586,7 +680,7 @@
     const results = document.getElementById('search-results');
     if (!list.length){ results.innerHTML = '<p class="empty">No matches.</p>'; return; }
     results.innerHTML = list.map(function(n){
-      return '<div class="note-card" data-person="' + attr(n.personId) + '">' +
+      return '<div class="note-card" data-person="' + attr(n.personId) + '" data-note="' + attr(n.noteId) + '">' +
         '<div class="person-link">' + escapeHtml(n.personName || '') +
         (n.personCompany ? ' · ' + escapeHtml(n.personCompany) : '') + '</div>' +
         '<div class="when"><span>' + escapeHtml(n.date || '') + (n.location ? ' · ' + escapeHtml(n.location) : '') + '</span>' +
@@ -595,7 +689,10 @@
         '</div>';
     }).join('');
     results.querySelectorAll('.note-card').forEach(function(card){
-      card.addEventListener('click', function(){ openPerson(card.dataset.person); });
+      card.addEventListener('click', function(){
+        const note = list.find(function(n){ return n.noteId === card.dataset.note; });
+        if (note) openNoteDetail(note, note.personName, 'search');
+      });
     });
   }
 
@@ -625,6 +722,10 @@
   function byLastThenFirst(a, b){
     return String(a.lastName || '').localeCompare(String(b.lastName || ''))
       || String(a.firstName || '').localeCompare(String(b.firstName || ''));
+  }
+
+  function byDateDesc(a, b){
+    return new Date(b.date) - new Date(a.date);
   }
 
   function escapeHtml(s){
