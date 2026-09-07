@@ -1,0 +1,564 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<title>Rolodex</title>
+<meta name="theme-color" content="#a8681f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Rolodex">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+  :root{
+    --bg:#f5f6f2; --surface:#ffffff; --surface-2:#edeee7;
+    --ink:#1c2430; --ink-soft:#565f6f; --ink-faint:#8c94a1;
+    --accent:#a8681f; --accent-ink:#7a4c17; --accent-soft:#f0dfc0;
+    --line:#dcdfd6; --good:#3f7b5c; --bad:#a3402f;
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#14181d; --surface:#1b2129; --surface-2:#20262f;
+      --ink:#e7e9ec; --ink-soft:#aab2bf; --ink-faint:#6d7580;
+      --accent:#dba75a; --accent-ink:#f0c98a; --accent-soft:#3a2c17;
+      --line:#2c333d; --good:#5fa684; --bad:#e08a76;
+    }
+  }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ height:100%; }
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    display:flex; flex-direction:column; overflow:hidden;
+  }
+  header.topbar{
+    padding:calc(14px + var(--safe-top)) 20px 14px;
+    background:var(--surface); border-bottom:1px solid var(--line);
+    flex:0 0 auto;
+  }
+  header.topbar h1{ margin:0; font-size:19px; font-weight:600; }
+  header.topbar p{ margin:2px 0 0; font-size:13px; color:var(--ink-faint); }
+
+  main{ flex:1 1 auto; overflow-y:auto; position:relative; -webkit-overflow-scrolling:touch; }
+  .view{ display:none; padding:16px 20px calc(24px + var(--safe-bottom)); }
+  .view.active{ display:block; }
+
+  .field{ margin-bottom:16px; }
+  .field label{ display:block; font-size:13px; font-weight:600; color:var(--ink-soft); margin-bottom:6px; }
+  input[type=text], input[type=date], input[type=url], input[type=password], textarea, select{
+    width:100%; padding:11px 12px; border:1px solid var(--line); border-radius:9px;
+    background:var(--surface); color:var(--ink); font-size:16px; font-family:inherit;
+  }
+  textarea{ min-height:110px; resize:vertical; }
+  .checkbox-row{ display:flex; align-items:center; gap:10px; padding:4px 0; }
+  .checkbox-row input{ width:20px; height:20px; }
+  .checkbox-row label{ font-size:15px; color:var(--ink); }
+
+  .btn{
+    display:inline-flex; align-items:center; justify-content:center;
+    padding:12px 18px; border-radius:10px; border:none; font-size:15px; font-weight:600;
+    background:var(--accent); color:#fff; cursor:pointer; width:100%;
+  }
+  .btn.secondary{ background:var(--surface-2); color:var(--ink); border:1px solid var(--line); }
+  .btn.link{ background:transparent; color:var(--accent-ink); width:auto; padding:8px 0; font-weight:500; }
+  .btn:active{ opacity:.8; }
+  .btn-row{ display:flex; gap:10px; }
+  .btn-row .btn{ flex:1; }
+
+  .empty{ text-align:center; padding:60px 20px; color:var(--ink-faint); font-size:14.5px; }
+
+  .person-row{
+    display:flex; align-items:center; gap:12px; padding:13px 0; border-bottom:1px solid var(--line);
+  }
+  .avatar{
+    width:38px; height:38px; border-radius:50%; background:var(--accent-soft); color:var(--accent-ink);
+    display:flex; align-items:center; justify-content:center; font-weight:600; font-size:14px; flex:0 0 auto;
+  }
+  .person-row .meta{ flex:1; min-width:0; }
+  .person-row .name{ font-weight:600; font-size:15.5px; }
+  .person-row .sub{ font-size:13px; color:var(--ink-faint); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .chip{
+    font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.03em;
+    color:var(--accent-ink); background:var(--accent-soft); padding:2px 8px; border-radius:20px; flex:0 0 auto;
+  }
+
+  .person-card{
+    background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:18px; margin-bottom:20px;
+  }
+  .person-card .name{ font-size:20px; font-weight:600; margin-bottom:2px; }
+  .person-card .company{ color:var(--ink-soft); font-size:14.5px; margin-bottom:10px; }
+  .person-card .tags{ font-size:13px; color:var(--ink-faint); margin-top:8px; }
+
+  .section-label{
+    font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:.05em;
+    color:var(--ink-faint); margin:20px 0 10px;
+  }
+
+  .note-card{
+    background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin-bottom:12px;
+  }
+  .note-card .when{ font-size:13px; color:var(--ink-faint); display:flex; justify-content:space-between; gap:8px; margin-bottom:6px; }
+  .note-card .summary{ font-size:14.5px; line-height:1.45; white-space:pre-wrap; }
+  .note-card .person-link{ font-size:13.5px; font-weight:600; color:var(--accent-ink); margin-bottom:4px; }
+  .followup-tag{ font-size:11px; font-weight:600; color:var(--good); }
+
+  .search-box{ display:flex; gap:8px; margin-bottom:16px; }
+  .search-box input{ flex:1; }
+
+  .fab{
+    position:fixed; right:20px; bottom:calc(78px + var(--safe-bottom)); z-index:5;
+    width:54px; height:54px; border-radius:50%; border:none; background:var(--accent); color:#fff;
+    font-size:28px; line-height:1; box-shadow:0 4px 14px rgba(0,0,0,.25); cursor:pointer;
+  }
+  .fab:active{ opacity:.85; }
+
+  nav.tabbar{
+    flex:0 0 auto; display:flex; border-top:1px solid var(--line); background:var(--surface);
+    padding-bottom:var(--safe-bottom);
+  }
+  nav.tabbar button{
+    flex:1; background:none; border:none; padding:10px 4px 8px; font-size:11.5px; font-weight:600;
+    color:var(--ink-faint); cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:3px;
+  }
+  nav.tabbar button .dot{ width:6px; height:6px; border-radius:50%; background:transparent; }
+  nav.tabbar button.active{ color:var(--accent-ink); }
+  nav.tabbar button.active .dot{ background:var(--accent); }
+
+  .backlink{ font-size:14px; color:var(--accent-ink); background:none; border:none; padding:0 0 14px; cursor:pointer; font-weight:500; }
+  .status{ font-size:13.5px; padding:10px 12px; border-radius:8px; margin-bottom:14px; }
+  .status.error{ background:rgba(163,64,47,.12); color:var(--bad); }
+  .status.ok{ background:rgba(63,123,92,.12); color:var(--good); }
+  .helptext{ font-size:12.5px; color:var(--ink-faint); margin-top:6px; line-height:1.4; }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <h1 id="topbar-title">Rolodex</h1>
+  <p id="topbar-sub"></p>
+</header>
+
+<main>
+
+  <!-- SETTINGS -->
+  <section id="view-settings" class="view">
+    <div class="field">
+      <label for="cfg-url">Apps Script Web App URL</label>
+      <input type="url" id="cfg-url" placeholder="https://script.google.com/.../exec">
+    </div>
+    <div class="field">
+      <label for="cfg-token">Access token</label>
+      <input type="password" id="cfg-token" placeholder="the token you set in Code.gs">
+    </div>
+    <div id="cfg-status"></div>
+    <div class="btn-row">
+      <button class="btn" id="cfg-save">Save &amp; test</button>
+    </div>
+    <p class="helptext">Both are stored only on this phone, never sent anywhere except your own Apps Script deployment.</p>
+  </section>
+
+  <!-- PEOPLE -->
+  <section id="view-people" class="view">
+    <div id="people-list"></div>
+  </section>
+
+  <!-- PERSON DETAIL -->
+  <section id="view-person" class="view">
+    <button class="backlink" data-back="people">‹ People</button>
+    <div id="person-detail"></div>
+  </section>
+
+  <!-- PERSON FORM -->
+  <section id="view-person-form" class="view">
+    <button class="backlink" data-back="people">‹ Cancel</button>
+    <form id="person-form">
+      <div class="field"><label for="pf-first">First name</label><input type="text" id="pf-first" required></div>
+      <div class="field"><label for="pf-last">Last name</label><input type="text" id="pf-last"></div>
+      <div class="field"><label for="pf-company">Company</label><input type="text" id="pf-company"></div>
+      <div class="field">
+        <label for="pf-relationship">Relationship</label>
+        <select id="pf-relationship">
+          <option value="friend">Friend</option>
+          <option value="business partner">Business partner</option>
+          <option value="scholar">Scholar</option>
+          <option value="online contact">Online contact</option>
+        </select>
+      </div>
+      <div class="field"><label for="pf-tags">Tags</label><input type="text" id="pf-tags" placeholder="optional, comma-separated"></div>
+      <div id="pf-status"></div>
+      <button class="btn" type="submit">Save person</button>
+    </form>
+  </section>
+
+  <!-- NOTE FORM -->
+  <section id="view-note-form" class="view">
+    <button class="backlink" data-back="person">‹ Cancel</button>
+    <form id="note-form">
+      <p id="nf-person" class="section-label"></p>
+      <div class="field"><label for="nf-date">When</label><input type="date" id="nf-date" required></div>
+      <div class="field"><label for="nf-location">Where</label><input type="text" id="nf-location" placeholder="e.g. Café Slavia, Prague"></div>
+      <div class="field"><label for="nf-summary">What was discussed</label><textarea id="nf-summary" required></textarea></div>
+      <div class="checkbox-row">
+        <input type="checkbox" id="nf-followup">
+        <label for="nf-followup">Schedule a follow-up in Google Calendar</label>
+      </div>
+      <div id="nf-status"></div>
+      <button class="btn" type="submit">Save note</button>
+    </form>
+  </section>
+
+  <!-- SEARCH -->
+  <section id="view-search" class="view">
+    <div class="search-box">
+      <input type="text" id="search-input" placeholder="Search notes, names, companies…">
+    </div>
+    <div id="search-results"></div>
+  </section>
+
+</main>
+
+<button class="fab" id="fab" hidden>+</button>
+
+<nav class="tabbar">
+  <button data-tab="people"><span class="dot"></span>People</button>
+  <button data-tab="search"><span class="dot"></span>Search</button>
+  <button data-tab="settings"><span class="dot"></span>Settings</button>
+</nav>
+
+<script>
+(function(){
+  'use strict';
+
+  const CONFIG_KEY = 'rolodexConfig';
+  const RELATIONSHIP_LABELS = {
+    'friend': 'Friend', 'business partner': 'Business partner',
+    'scholar': 'Scholar', 'online contact': 'Online contact'
+  };
+
+  let state = {
+    tab: 'people',
+    people: [],
+    peopleById: {},
+    currentPersonId: null,
+    previousView: 'people'
+  };
+
+  // ---------- config / API ----------
+
+  function getConfig(){
+    try { return JSON.parse(localStorage.getItem(CONFIG_KEY)) || null; }
+    catch(e){ return null; }
+  }
+  function setConfig(cfg){ localStorage.setItem(CONFIG_KEY, JSON.stringify(cfg)); }
+  function hasConfig(){ const c = getConfig(); return !!(c && c.apiUrl && c.token); }
+
+  async function apiGet(action, params){
+    const cfg = getConfig();
+    if (!cfg) throw new Error('Not configured yet — set this up in Settings.');
+    const url = new URL(cfg.apiUrl);
+    url.searchParams.set('token', cfg.token);
+    url.searchParams.set('action', action);
+    Object.entries(params || {}).forEach(function(pair){ url.searchParams.set(pair[0], pair[1]); });
+    const res = await fetch(url.toString());
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    return data;
+  }
+
+  async function apiPost(action, body){
+    const cfg = getConfig();
+    if (!cfg) throw new Error('Not configured yet — set this up in Settings.');
+    const url = new URL(cfg.apiUrl);
+    url.searchParams.set('token', cfg.token);
+    url.searchParams.set('action', action);
+    const res = await fetch(url.toString(), {
+      method: 'POST',
+      // text/plain avoids a CORS preflight (OPTIONS) request, which Apps Script
+      // web apps don't handle — Code.gs still reads this as JSON either way.
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(body || {})
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    return data;
+  }
+
+  // ---------- view switching ----------
+
+  function showView(name){
+    document.querySelectorAll('.view').forEach(function(v){ v.classList.remove('active'); });
+    document.getElementById('view-' + name).classList.add('active');
+    const isTab = name === 'people' || name === 'search' || name === 'settings';
+    if (isTab){
+      state.tab = name;
+      document.querySelectorAll('.tabbar button').forEach(function(b){
+        b.classList.toggle('active', b.dataset.tab === name);
+      });
+    }
+    const fab = document.getElementById('fab');
+    if (name === 'people'){ fab.hidden = false; fab.onclick = openPersonForm; }
+    else if (name === 'person'){ fab.hidden = false; fab.onclick = function(){ openNoteForm(state.currentPersonId); }; }
+    else { fab.hidden = true; }
+
+    const titles = {
+      settings: ['Rolodex', 'Connect this app to your Google Sheet'],
+      people: ['Rolodex', state.people.length + ' people'],
+      person: ['Rolodex', 'Person'],
+      'person-form': ['New person', ''],
+      'note-form': ['New note', ''],
+      search: ['Rolodex', 'Search notes and people']
+    };
+    const t = titles[name] || ['Rolodex', ''];
+    document.getElementById('topbar-title').textContent = t[0];
+    document.getElementById('topbar-sub').textContent = t[1];
+  }
+
+  document.querySelectorAll('.tabbar button').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      const tab = btn.dataset.tab;
+      showView(tab);
+      if (tab === 'people') loadPeople();
+    });
+  });
+  document.querySelectorAll('[data-back]').forEach(function(btn){
+    btn.addEventListener('click', function(){ showView(btn.dataset.back); });
+  });
+
+  // ---------- people ----------
+
+  async function loadPeople(){
+    const list = document.getElementById('people-list');
+    list.innerHTML = '<p class="empty">Loading…</p>';
+    try {
+      const data = await apiGet('people', {});
+      state.people = data.people || [];
+      state.peopleById = {};
+      state.people.forEach(function(p){ state.peopleById[p.personId] = p; });
+      renderPeopleList();
+      document.getElementById('topbar-sub').textContent = state.people.length + ' people';
+    } catch(err){
+      list.innerHTML = '<p class="empty">' + escapeHtml(err.message) + '</p>';
+    }
+  }
+
+  function renderPeopleList(){
+    const list = document.getElementById('people-list');
+    if (!state.people.length){
+      list.innerHTML = '<p class="empty">No one yet — tap + to add the first person.</p>';
+      return;
+    }
+    list.innerHTML = state.people.map(function(p){
+      const initials = ((p.firstName||'')[0]||'') + ((p.lastName||'')[0]||'');
+      const sub = [p.company, RELATIONSHIP_LABELS[p.relationship] || p.relationship].filter(Boolean).join(' · ');
+      return '<div class="person-row" data-person="' + attr(p.personId) + '">' +
+        '<div class="avatar">' + escapeHtml(initials.toUpperCase()) + '</div>' +
+        '<div class="meta"><div class="name">' + escapeHtml([p.firstName, p.lastName].filter(Boolean).join(' ')) + '</div>' +
+        '<div class="sub">' + escapeHtml(sub) + '</div></div>' +
+        '</div>';
+    }).join('');
+    list.querySelectorAll('.person-row').forEach(function(row){
+      row.addEventListener('click', function(){ openPerson(row.dataset.person); });
+    });
+  }
+
+  async function openPerson(personId){
+    state.currentPersonId = personId;
+    showView('person');
+    const wrap = document.getElementById('person-detail');
+    wrap.innerHTML = '<p class="empty">Loading…</p>';
+    try {
+      const person = state.peopleById[personId] || (await apiGet('person', { personId: personId })).person;
+      const notesData = await apiGet('notes', { personId: personId });
+      renderPersonDetail(person, notesData.notes || []);
+      document.getElementById('topbar-sub').textContent = [person.firstName, person.lastName].filter(Boolean).join(' ');
+    } catch(err){
+      wrap.innerHTML = '<p class="empty">' + escapeHtml(err.message) + '</p>';
+    }
+  }
+
+  function renderPersonDetail(person, notes){
+    const wrap = document.getElementById('person-detail');
+    const sub = [person.company, RELATIONSHIP_LABELS[person.relationship] || person.relationship].filter(Boolean).join(' · ');
+    let html = '<div class="person-card">' +
+      '<div class="name">' + escapeHtml([person.firstName, person.lastName].filter(Boolean).join(' ')) + '</div>' +
+      (sub ? '<div class="company">' + escapeHtml(sub) + '</div>' : '') +
+      (person.tags ? '<div class="tags">' + escapeHtml(person.tags) + '</div>' : '') +
+      '</div>';
+    html += '<div class="section-label">Notes</div>';
+    if (!notes.length){
+      html += '<p class="empty">No notes yet — tap + to add the first one.</p>';
+    } else {
+      html += notes.map(function(n){
+        return '<div class="note-card">' +
+          '<div class="when"><span>' + escapeHtml(n.date || '') + (n.location ? ' · ' + escapeHtml(n.location) : '') + '</span>' +
+          (n.followUp ? '<span class="followup-tag">Follow-up</span>' : '') + '</div>' +
+          '<div class="summary">' + escapeHtml(n.summary || '') + '</div>' +
+          '</div>';
+      }).join('');
+    }
+    wrap.innerHTML = html;
+  }
+
+  // ---------- person form ----------
+
+  function openPersonForm(){
+    document.getElementById('person-form').reset();
+    document.getElementById('pf-status').innerHTML = '';
+    showView('person-form');
+  }
+
+  document.getElementById('person-form').addEventListener('submit', async function(e){
+    e.preventDefault();
+    const statusEl = document.getElementById('pf-status');
+    const record = {
+      firstName: document.getElementById('pf-first').value.trim(),
+      lastName: document.getElementById('pf-last').value.trim(),
+      company: document.getElementById('pf-company').value.trim(),
+      relationship: document.getElementById('pf-relationship').value,
+      tags: document.getElementById('pf-tags').value.trim()
+    };
+    statusEl.innerHTML = '<p class="status">Saving…</p>';
+    try {
+      const data = await apiPost('createPerson', record);
+      await loadPeople();
+      showView('people');
+      openPerson(data.person.personId);
+    } catch(err){
+      statusEl.innerHTML = '<p class="status error">' + escapeHtml(err.message) + '</p>';
+    }
+  });
+
+  // ---------- note form ----------
+
+  function openNoteForm(personId){
+    const person = state.peopleById[personId];
+    document.getElementById('note-form').reset();
+    document.getElementById('nf-status').innerHTML = '';
+    document.getElementById('nf-date').value = new Date().toISOString().slice(0, 10);
+    document.getElementById('nf-person').textContent = person
+      ? 'For ' + [person.firstName, person.lastName].filter(Boolean).join(' ')
+      : '';
+    showView('note-form');
+  }
+
+  document.getElementById('note-form').addEventListener('submit', async function(e){
+    e.preventDefault();
+    const statusEl = document.getElementById('nf-status');
+    const personId = state.currentPersonId;
+    const followUp = document.getElementById('nf-followup').checked;
+    const record = {
+      personId: personId,
+      date: document.getElementById('nf-date').value,
+      location: document.getElementById('nf-location').value.trim(),
+      summary: document.getElementById('nf-summary').value.trim(),
+      followUp: followUp
+    };
+    statusEl.innerHTML = '<p class="status">Saving…</p>';
+    try {
+      await apiPost('createNote', record);
+      if (followUp) openCalendarFor(state.peopleById[personId]);
+      await openPerson(personId);
+    } catch(err){
+      statusEl.innerHTML = '<p class="status error">' + escapeHtml(err.message) + '</p>';
+    }
+  });
+
+  function openCalendarFor(person){
+    const name = person ? [person.firstName, person.lastName].filter(Boolean).join(' ') : '';
+    const title = ('Follow up with ' + name).trim();
+    const details = person && person.company ? 'Company: ' + person.company : '';
+    const params = new URLSearchParams({ action: 'TEMPLATE', text: title, details: details });
+    window.open('https://calendar.google.com/calendar/render?' + params.toString(), '_blank');
+  }
+
+  // ---------- search ----------
+
+  let searchTimer = null;
+  document.getElementById('search-input').addEventListener('input', function(e){
+    clearTimeout(searchTimer);
+    const q = e.target.value.trim();
+    if (!q){ document.getElementById('search-results').innerHTML = ''; return; }
+    searchTimer = setTimeout(function(){ runSearch(q); }, 350);
+  });
+
+  async function runSearch(q){
+    const results = document.getElementById('search-results');
+    results.innerHTML = '<p class="empty">Searching…</p>';
+    try {
+      const data = await apiGet('search', { q: q });
+      renderSearchResults(data.results || []);
+    } catch(err){
+      results.innerHTML = '<p class="empty">' + escapeHtml(err.message) + '</p>';
+    }
+  }
+
+  function renderSearchResults(list){
+    const results = document.getElementById('search-results');
+    if (!list.length){ results.innerHTML = '<p class="empty">No matches.</p>'; return; }
+    results.innerHTML = list.map(function(n){
+      return '<div class="note-card" data-person="' + attr(n.personId) + '">' +
+        '<div class="person-link">' + escapeHtml(n.personName || '') +
+        (n.personCompany ? ' · ' + escapeHtml(n.personCompany) : '') + '</div>' +
+        '<div class="when"><span>' + escapeHtml(n.date || '') + (n.location ? ' · ' + escapeHtml(n.location) : '') + '</span>' +
+        (n.followUp ? '<span class="followup-tag">Follow-up</span>' : '') + '</div>' +
+        '<div class="summary">' + escapeHtml(n.summary || '') + '</div>' +
+        '</div>';
+    }).join('');
+    results.querySelectorAll('.note-card').forEach(function(card){
+      card.addEventListener('click', function(){ openPerson(card.dataset.person); });
+    });
+  }
+
+  // ---------- settings ----------
+
+  document.getElementById('cfg-save').addEventListener('click', async function(){
+    const statusEl = document.getElementById('cfg-status');
+    const apiUrl = document.getElementById('cfg-url').value.trim();
+    const token = document.getElementById('cfg-token').value.trim();
+    if (!apiUrl || !token){
+      statusEl.innerHTML = '<p class="status error">Both fields are required.</p>';
+      return;
+    }
+    statusEl.innerHTML = '<p class="status">Testing connection…</p>';
+    setConfig({ apiUrl: apiUrl, token: token });
+    try {
+      await apiGet('people', {});
+      statusEl.innerHTML = '<p class="status ok">Connected. Loading your people…</p>';
+      setTimeout(function(){ showView('people'); loadPeople(); }, 500);
+    } catch(err){
+      statusEl.innerHTML = '<p class="status error">Saved, but the test call failed: ' + escapeHtml(err.message) + '</p>';
+    }
+  });
+
+  // ---------- helpers ----------
+
+  function escapeHtml(s){
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+      return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c];
+    });
+  }
+  function attr(s){ return escapeHtml(s); }
+
+  // ---------- boot ----------
+
+  function boot(){
+    const cfg = getConfig();
+    if (cfg){
+      document.getElementById('cfg-url').value = cfg.apiUrl || '';
+      document.getElementById('cfg-token').value = cfg.token || '';
+    }
+    if (hasConfig()){
+      showView('people');
+      loadPeople();
+    } else {
+      showView('settings');
+    }
+  }
+  boot();
+})();
+</script>
+</body>
+</html>
